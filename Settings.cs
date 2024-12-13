@@ -1,16 +1,16 @@
-﻿using ExileCore.Shared.Interfaces;
-using ExileCore.Shared.Nodes;
+﻿using ExileCore2.Shared.Interfaces;
+using ExileCore2.Shared.Nodes;
+using ExileCore2.Shared.Attributes;
+using System.Drawing;
 
 namespace XPBar
 {
     public class Settings : ISettings
     {
-        public Settings()
-        {
-            ExampleRangeNode = new RangeNode<int>(1, 0, 100);
-        }
-
-        public RangeNode<int> ExampleRangeNode { get; set; }
+	[Menu("Enabled")]
         public ToggleNode Enable { get; set; } = new ToggleNode(true);
+		
+	[Menu("Text Color")]
+	public ColorNode TextColor { get; set; } = new ColorNode(Color.White);
     }
 }

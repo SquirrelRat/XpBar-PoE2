@@ -1,8 +1,10 @@
 ﻿using System;
-using ExileCore;
-using ExileCore.PoEMemory.Components;
-using ExileCore.Shared.Enums;
-using SharpDX;
+using ExileCore2;
+using ExileCore2.PoEMemory.Components;
+using ExileCore2.Shared.Enums;
+using System.Drawing;
+using RectangleF = ExileCore2.Shared.RectangleF;
+using Vector2 = System.Numerics.Vector2;
 
 namespace XPBar
 {
@@ -13,7 +15,7 @@ namespace XPBar
         private readonly uint[] ExpTable =
         {
             0,
-			525,
+	    525,
             1760,
             3781,
             7184,
@@ -136,8 +138,8 @@ namespace XPBar
 		public override void Render()
         {
             int PlayerLevel = GameController.Player.GetComponent<Player>().Level;
-			uint PlayerExp = GameController.Player.GetComponent<Player>().XP;
-			double ExpPct = GetExpPct(PlayerLevel, PlayerExp);
+	    uint PlayerExp = GameController.Player.GetComponent<Player>().XP;
+	    double ExpPct = GetExpPct(PlayerLevel, PlayerExp);
             var PlayerExpString = PlayerLevel + ": " + Math.Round(ExpPct, 3) + "%";
             var size = Graphics.MeasureText(PlayerExpString, 20);
 
@@ -146,12 +148,9 @@ namespace XPBar
             var center = new Vector2(scrRect.X + scrRect.Width / 2, scrRect.Height - 10);
             center.Y -= 5;
             var textRect = center;
-            textRect.Y -= 5;
-            Graphics.DrawText(PlayerExpString, textRect, Color.White, FontAlign.Center); // - new Vector2(size.Width / 2, size.Height / 2)
+            textRect.Y -= 0;
+            Graphics.DrawTextWithBackground(PlayerExpString, textRect, Settings.TextColor, FontAlign.Center, Color.Black); // - new Vector2(size.Width / 2, size.Height / 2)
 
-            var drawRect = new RectangleF(center.X - 5 - size.X / 2, center.Y - size.Y / 2, size.X + 10, size.Y);
-
-            Graphics.DrawBox(drawRect, Color.Black);
         }
     }
 }
