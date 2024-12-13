@@ -142,13 +142,8 @@ namespace XPBar
 	    double ExpPct = GetExpPct(PlayerLevel, PlayerExp);
             var PlayerExpString = PlayerLevel + ": " + Math.Round(ExpPct, 3) + "%";
             var size = Graphics.MeasureText(PlayerExpString, 20);
-
-            var scrRect = GameController.Window.GetWindowRectangle();
-
-            var center = new Vector2(scrRect.X + scrRect.Width / 2, scrRect.Height - 10);
-            center.Y -= 5;
+            var center = new Vector2(Settings.XPos, Settings.YPos);
             var textRect = center;
-            textRect.Y -= 0;
             Graphics.DrawTextWithBackground(PlayerExpString, textRect, Settings.TextColor, FontAlign.Center, Color.Black); // - new Vector2(size.Width / 2, size.Height / 2)
 
         }

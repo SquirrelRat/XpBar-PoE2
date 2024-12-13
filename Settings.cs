@@ -12,5 +12,11 @@ namespace XPBar
 		
 	[Menu("Text Color")]
 	public ColorNode TextColor { get; set; } = new ColorNode(Color.White);
+	
+	[Menu("X Position")]
+    public RangeNode<int> XPos { get; set; } = new RangeNode<int>(950, 0, 2160);
+	
+	[Menu("Y Position")]
+    public RangeNode<int> YPos { get; set; } = new RangeNode<int>(1650, 0, 3840);
     }
 }
