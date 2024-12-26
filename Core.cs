@@ -5,6 +5,7 @@ using ExileCore2.Shared.Enums;
 using System.Drawing;
 using RectangleF = ExileCore2.Shared.RectangleF;
 using Vector2 = System.Numerics.Vector2;
+using ExileCore2.PoEMemory;
 
 namespace XPBar
 {
@@ -51,20 +52,29 @@ namespace XPBar
 
         public override void Render()
         {
-            int PlayerLevel = GameController.Player.GetComponent<Player>().Level;
-            uint PlayerExp = GameController.Player.GetComponent<Player>().XP;
-            double ExpPct = GetExpPct(PlayerLevel, PlayerExp);
-            var PlayerExpString = $"{PlayerLevel}: {Math.Round(ExpPct, 3)}%";
+            if (GameController.Game.IngameState.IngameUi.GameUI?.GetChildAtIndex(0) is not Element expBar) return;
 
-            // Use the text scale from settings
-            using (Graphics.SetTextScale(Settings.TextSize.Value))
+            var player = GameController.Player.GetComponent<Player>();
+            var expPct = GetExpPct(player.Level, player.XP);
+            var displayText = $"{player.Level}: {Math.Round(expPct, 3)}%";
+
+            using (Graphics.SetTextScale(Settings.TextScaleSize.Value))
             {
-                var center = new Vector2(Settings.XPos, Settings.YPos);
-                var textRect = center;
+                var position = Settings.XPos.Value != 0 || Settings.YPos.Value != 0
+                    ? new Vector2(Settings.XPos, Settings.YPos)
+                    : CalculateCenteredPosition(expBar.GetClientRect(), Graphics.MeasureText(displayText));
 
-                // Draw the text with background using Settings.TextColor directly
-                Graphics.DrawTextWithBackground(PlayerExpString, textRect, Settings.TextColor, FontAlign.Center, Color.Black);
+                var alignment = Settings.XPos.Value != 0 || Settings.YPos.Value != 0
+                    ? FontAlign.Center
+                    : FontAlign.Left;
+
+                Graphics.DrawTextWithBackground(displayText, position, Settings.TextColor, alignment, Color.Black);
             }
+        }
+
+        private static Vector2 CalculateCenteredPosition(RectangleF container, Vector2 textSize)
+        {
+            return container.Location + (container.Size - textSize) / 2;
         }
     }
 }
