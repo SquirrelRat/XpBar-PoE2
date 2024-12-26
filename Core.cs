@@ -56,7 +56,7 @@ namespace XPBar
 
             var player = GameController.Player.GetComponent<Player>();
             var expPct = GetExpPct(player.Level, player.XP);
-            var displayText = $"{player.Level}: {Math.Round(expPct, 3)}%";
+            var displayText = $"{player.Level}: {Math.Round(expPct, Settings.DecimalPlaces.Value)}%";
 
             using (Graphics.SetTextScale(Settings.TextScaleSize.Value))
             {
@@ -68,7 +68,7 @@ namespace XPBar
                     ? FontAlign.Center
                     : FontAlign.Left;
 
-                Graphics.DrawTextWithBackground(displayText, position, Settings.TextColor, alignment, Color.Black);
+                Graphics.DrawTextWithBackground(displayText, position, Settings.TextColor, alignment, Settings.BackgroundColor);
             }
         }
 
