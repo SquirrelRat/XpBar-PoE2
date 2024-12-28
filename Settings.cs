@@ -9,12 +9,15 @@ namespace XPBar
     {
         [Menu("Enabled")]
         public ToggleNode Enable { get; set; } = new ToggleNode(true);
+
+        [Menu("Show Time To Level")]
+        public ToggleNode ShowTTL { get; set; } = new ToggleNode(true);
         
         [Menu("Text Color")]
         public ColorNode TextColor { get; set; } = new ColorNode(Color.White);
 
         [Menu("Background Color")]
-        public ColorNode BackgroundColor { get; set; } = new ColorNode(Color.FromArgb(180, 00, 00, 00)); 
+        public ColorNode BackgroundColor { get; set; } = new ColorNode(Color.FromArgb(140, 0, 0, 0));
         
         [Menu("X Position")]
         public RangeNode<int> XPos { get; set; } = new RangeNode<int>(0, 0, 2160);

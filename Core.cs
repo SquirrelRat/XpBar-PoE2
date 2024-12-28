@@ -1,21 +1,18 @@
 ﻿using System;
+using System.Collections.Generic;
 using ExileCore2;
 using ExileCore2.PoEMemory.Components;
+using ExileCore2.PoEMemory;
 using ExileCore2.Shared.Enums;
 using System.Drawing;
-using RectangleF = ExileCore2.Shared.RectangleF;
 using Vector2 = System.Numerics.Vector2;
-using ExileCore2.PoEMemory;
+using RectangleF = ExileCore2.Shared.RectangleF;
 
 namespace XPBar
 {
     public class Core : BaseSettingsPlugin<Settings>
     {
-        #region ExpTable
-
-        private readonly uint[] ExpTable =
-        {
-            0, 525, 1760, 3781, 7184, 12186, 19324, 29377, 43181, 61693, 85990,
+        private readonly uint[] ExpTable = { 0, 525, 1760, 3781, 7184, 12186, 19324, 29377, 43181, 61693, 85990,
             117506, 157384, 207736, 269997, 346462, 439268, 551295, 685171,
             843709, 1030734, 1249629, 1504995, 1800847, 2142652, 2535122,
             2984677, 3496798, 4080655, 4742836, 5490247, 6334393, 7283446,
@@ -30,24 +27,71 @@ namespace XPBar
             1291270350, 1400795257, 1519130326, 1646943474, 1784977296,
             1934009687, 2094900291, 2268549086, 2455921256, 2658074992,
             2876116901, 3111280300, 3364828162, 3638186694, 3932818530,
-            4250334444
-        };
+            4250334444 };
 
-        #endregion
+        private DateTime sessionStart;
+        private uint sessionStartXp;
+        private bool isFirstRun = true;
+        private double xpPerSecond;
 
-        public override bool Initialise()
+		public override bool Initialise() 
+		{
+			ResetTTL();
+			return true;
+		}
+
+
+        public override void AreaChange(AreaInstance area)
         {
-            return true;
+            base.AreaChange(area);
+            ResetTTL();
         }
 
-        private double GetExpPct(int Level, uint Exp)
+        private void ResetTTL()
         {
-            if (Level >= 100) return 0.0f;
-            uint LevelStartExp = ExpTable[Level - 1];
-            uint ExpNeededForNextLevel = ExpTable[Level];
-            uint CurrLevelExp = Exp - LevelStartExp;
-            uint NextLevelExp = ExpNeededForNextLevel - LevelStartExp;
-            return (double)CurrLevelExp / NextLevelExp * 100;
+            isFirstRun = true;
+            xpPerSecond = 0;
+        }
+
+        private double GetExpPct(int level, uint exp)
+        {
+            if (level >= 100) return 0.0;
+
+            var levelStart = ExpTable[level - 1];
+            var nextLevel = ExpTable[level];
+            var currExp = exp - levelStart;
+            var neededExp = nextLevel - levelStart;
+
+            return (double)currExp / neededExp * 100;
+        }
+
+        private string GetTTL(uint currentXp, int level)
+        {
+            if (!Settings.ShowTTL) return string.Empty;
+
+            var now = DateTime.Now;
+            if (isFirstRun)
+            {
+                sessionStart = now;
+                sessionStartXp = currentXp;
+                isFirstRun = false;
+                return "00:00:00";
+            }
+
+            var totalTime = (now - sessionStart).TotalSeconds;
+            if (totalTime < 10) return "00:00:00";
+
+            var gained = (long)currentXp - sessionStartXp;
+            if (gained > 0) xpPerSecond = gained / totalTime;
+            if (xpPerSecond <= 0) return "00:00:00";
+
+            var remaining = ExpTable[level] - currentXp;
+            var seconds = remaining / xpPerSecond;
+
+            if (double.IsInfinity(seconds) || double.IsNaN(seconds)) return "00:00:00";
+
+            var time = TimeSpan.FromSeconds(seconds);
+            return time.Hours > 99 ? ">99:59:59" : $"{time.Hours:00}:{time.Minutes:00}:{time.Seconds:00}";
         }
 
         public override void Render()
@@ -55,26 +99,24 @@ namespace XPBar
             if (GameController.Game.IngameState.IngameUi.GameUI?.GetChildAtIndex(0) is not Element expBar) return;
 
             var player = GameController.Player.GetComponent<Player>();
-            var expPct = GetExpPct(player.Level, player.XP);
-            var displayText = $"{player.Level}: {Math.Round(expPct, Settings.DecimalPlaces.Value)}%";
+            var pct = GetExpPct(player.Level, player.XP);
+            var text = $"{player.Level}: {Math.Round(pct, Settings.DecimalPlaces.Value)}%";
+
+            if (Settings.ShowTTL) text += $" - TTL: {GetTTL(player.XP, player.Level)}";
 
             using (Graphics.SetTextScale(Settings.TextScaleSize.Value))
             {
-                var position = Settings.XPos.Value != 0 || Settings.YPos.Value != 0
+                var pos = Settings.XPos.Value != 0 || Settings.YPos.Value != 0
                     ? new Vector2(Settings.XPos, Settings.YPos)
-                    : CalculateCenteredPosition(expBar.GetClientRect(), Graphics.MeasureText(displayText));
+                    : CalculateCenteredPosition(expBar.GetClientRect(), Graphics.MeasureText(text));
 
-                var alignment = Settings.XPos.Value != 0 || Settings.YPos.Value != 0
-                    ? FontAlign.Center
-                    : FontAlign.Left;
+                var align = Settings.XPos.Value != 0 || Settings.YPos.Value != 0 ? FontAlign.Center : FontAlign.Left;
 
-                Graphics.DrawTextWithBackground(displayText, position, Settings.TextColor, alignment, Settings.BackgroundColor);
+                Graphics.DrawTextWithBackground(text, pos, Settings.TextColor, align, Settings.BackgroundColor);
             }
         }
 
-        private static Vector2 CalculateCenteredPosition(RectangleF container, Vector2 textSize)
-        {
-            return container.Location + (container.Size - textSize) / 2;
-        }
+        private static Vector2 CalculateCenteredPosition(RectangleF container, Vector2 textSize) =>
+            container.Location + (container.Size - textSize) / 2;
     }
 }
