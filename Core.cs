@@ -12,7 +12,13 @@ namespace XPBar
 {
     public class Core : BaseSettingsPlugin<Settings>
     {
-        private readonly uint[] ExpTable = { 0, 525, 1760, 3781, 7184, 12186, 19324, 29377, 43181, 61693, 85990,
+        private const string DEFAULT_TIME_DISPLAY = "00:00:00";
+        private const string MAX_TIME_DISPLAY = ">99:59:59";
+        private const int MIN_TIME_FOR_CALCULATION = 10; // Change this to whatever you want to give XP calculation time to predict
+        private const int MAX_LEVEL = 100;
+        
+        private readonly uint[] ExpTable = { 
+            0, 525, 1760, 3781, 7184, 12186, 19324, 29377, 43181, 61693, 85990,
             117506, 157384, 207736, 269997, 346462, 439268, 551295, 685171,
             843709, 1030734, 1249629, 1504995, 1800847, 2142652, 2535122,
             2984677, 3496798, 4080655, 4742836, 5490247, 6334393, 7283446,
@@ -27,19 +33,21 @@ namespace XPBar
             1291270350, 1400795257, 1519130326, 1646943474, 1784977296,
             1934009687, 2094900291, 2268549086, 2455921256, 2658074992,
             2876116901, 3111280300, 3364828162, 3638186694, 3932818530,
-            4250334444 };
+            4250334444
+        };
 
         private DateTime sessionStart;
         private uint sessionStartXp;
         private bool isFirstRun = true;
         private double xpPerSecond;
+        private DateTime lastXpGainTime;
+        private uint lastXpAmount;
 
-		public override bool Initialise() 
-		{
-			ResetTTL();
-			return true;
-		}
-
+        public override bool Initialise() 
+        {
+            ResetTTL();
+            return true;
+        }
 
         public override void AreaChange(AreaInstance area)
         {
@@ -51,11 +59,13 @@ namespace XPBar
         {
             isFirstRun = true;
             xpPerSecond = 0;
+            lastXpGainTime = DateTime.Now;
+            lastXpAmount = 0;
         }
 
         private double GetExpPct(int level, uint exp)
         {
-            if (level >= 100) return 0.0;
+            if (level >= MAX_LEVEL) return 0.0;
 
             var levelStart = ExpTable[level - 1];
             var nextLevel = ExpTable[level];
@@ -67,42 +77,61 @@ namespace XPBar
 
         private string GetTTL(uint currentXp, int level)
         {
-            if (!Settings.ShowTTL) return string.Empty;
-
             var now = DateTime.Now;
+            
+            if (currentXp > lastXpAmount)
+            {
+                lastXpGainTime = now;
+                lastXpAmount = currentXp;
+            }
+            else if ((now - lastXpGainTime).TotalMinutes > Settings.ResetTimerMinutes)
+            {
+                ResetTTL();
+                return DEFAULT_TIME_DISPLAY;
+            }
+
             if (isFirstRun)
             {
                 sessionStart = now;
                 sessionStartXp = currentXp;
+                lastXpAmount = currentXp;
                 isFirstRun = false;
-                return "00:00:00";
+                return DEFAULT_TIME_DISPLAY;
             }
 
             var totalTime = (now - sessionStart).TotalSeconds;
-            if (totalTime < 10) return "00:00:00";
+            if (totalTime < MIN_TIME_FOR_CALCULATION) return DEFAULT_TIME_DISPLAY;
 
             var gained = (long)currentXp - sessionStartXp;
             if (gained > 0) xpPerSecond = gained / totalTime;
-            if (xpPerSecond <= 0) return "00:00:00";
+            if (xpPerSecond <= 0) return DEFAULT_TIME_DISPLAY;
 
             var remaining = ExpTable[level] - currentXp;
             var seconds = remaining / xpPerSecond;
 
-            if (double.IsInfinity(seconds) || double.IsNaN(seconds)) return "00:00:00";
+            if (double.IsInfinity(seconds) || double.IsNaN(seconds)) 
+                return DEFAULT_TIME_DISPLAY;
 
             var time = TimeSpan.FromSeconds(seconds);
-            return time.Hours > 99 ? ">99:59:59" : $"{time.Hours:00}:{time.Minutes:00}:{time.Seconds:00}";
+            return time.Hours > 99 ? MAX_TIME_DISPLAY : 
+                $"{time.Hours:00}:{time.Minutes:00}:{time.Seconds:00}";
         }
 
         public override void Render()
         {
-            if (GameController.Game.IngameState.IngameUi.GameUI?.GetChildAtIndex(0) is not Element expBar) return;
+            if (GameController.Game.IngameState.IngameUi.GameUI?.GetChildAtIndex(0) is not Element expBar) 
+                return;
 
             var player = GameController.Player.GetComponent<Player>();
             var pct = GetExpPct(player.Level, player.XP);
             var text = $"{player.Level}: {Math.Round(pct, Settings.DecimalPlaces.Value)}%";
 
-            if (Settings.ShowTTL) text += $" - TTL: {GetTTL(player.XP, player.Level)}";
+            if (Settings.ShowTTL)
+            {
+                var ttl = GetTTL(player.XP, player.Level);
+                if (!string.IsNullOrEmpty(ttl))
+                    text += $" - TTL: {ttl}";
+            }
 
             using (Graphics.SetTextScale(Settings.TextScaleSize.Value))
             {
@@ -110,7 +139,9 @@ namespace XPBar
                     ? new Vector2(Settings.XPos, Settings.YPos)
                     : CalculateCenteredPosition(expBar.GetClientRect(), Graphics.MeasureText(text));
 
-                var align = Settings.XPos.Value != 0 || Settings.YPos.Value != 0 ? FontAlign.Center : FontAlign.Left;
+                var align = Settings.XPos.Value != 0 || Settings.YPos.Value != 0 
+                    ? FontAlign.Center 
+                    : FontAlign.Left;
 
                 Graphics.DrawTextWithBackground(text, pos, Settings.TextColor, align, Settings.BackgroundColor);
             }

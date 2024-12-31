@@ -13,6 +13,9 @@ namespace XPBar
         [Menu("Show Time To Level")]
         public ToggleNode ShowTTL { get; set; } = new ToggleNode(true);
         
+        [Menu("Reset Timer On Idle (Minutes)")]
+        public RangeNode<int> ResetTimerMinutes { get; set; } = new RangeNode<int>(1, 1, 10);
+        
         [Menu("Text Color")]
         public ColorNode TextColor { get; set; } = new ColorNode(Color.White);
 
