@@ -1,11 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using ExileCore2;
 using ExileCore2.PoEMemory.Components;
-using ExileCore2.PoEMemory;
 using ExileCore2.Shared.Enums;
-using System.Drawing;
-using Vector2 = System.Numerics.Vector2;
+using ExileCore2.PoEMemory;
+using System.Numerics;
 using RectangleF = ExileCore2.Shared.RectangleF;
 
 namespace XPBar
@@ -14,7 +12,7 @@ namespace XPBar
     {
         private const string DEFAULT_TIME_DISPLAY = "00:00:00";
         private const string MAX_TIME_DISPLAY = ">99:59:59";
-        private const int MIN_TIME_FOR_CALCULATION = 10; // Change this to whatever you want to give XP calculation time to predict
+        private const int MIN_TIME_FOR_CALCULATION = 10;
         private const int MAX_LEVEL = 100;
         
         private readonly uint[] ExpTable = { 
@@ -117,6 +115,26 @@ namespace XPBar
                 $"{time.Hours:00}:{time.Minutes:00}:{time.Seconds:00}";
         }
 
+        private double CalculateXPPenalty(int areaLevel, int playerLevel)
+        {
+            var safeZone = (int)Math.Floor(3 + playerLevel / 16.0);
+            var effectiveDifference = Math.Max(Math.Abs(playerLevel - areaLevel) - safeZone, 0);
+            double xpMultiplier;
+
+            if (playerLevel < 95)
+            {
+                xpMultiplier = Math.Pow((playerLevel + 5.0) / (playerLevel + 5.0 + Math.Pow(effectiveDifference, 2.5)), 1.5);
+            }
+            else
+            {
+                xpMultiplier = Math.Pow((playerLevel + 5.0) / (playerLevel + 5.0 + Math.Pow(effectiveDifference, 2.5)), 1.5)
+                    * (1.0 / (1 + 0.1 * (playerLevel - 94.0)))
+                    * (1.0 / 3.1);
+            }
+
+            return Math.Max(xpMultiplier * 100.0, 1.0);
+        }
+
         public override void Render()
         {
             if (GameController.Game.IngameState.IngameUi.GameUI?.GetChildAtIndex(0) is not Element expBar) 
@@ -125,6 +143,22 @@ namespace XPBar
             var player = GameController.Player.GetComponent<Player>();
             var pct = GetExpPct(player.Level, player.XP);
             var text = $"{player.Level}: {Math.Round(pct, Settings.DecimalPlaces.Value)}%";
+
+            if (Settings.ShowXPPenalty && GameController.Area?.CurrentArea != null)
+            {
+                var areaLevel = GameController.Area.CurrentArea.RealLevel;
+                var playerLevel = player.Level;
+                var penalty = CalculateXPPenalty(areaLevel, playerLevel);
+
+                if (Settings.ShowDebugInfo)
+                {
+                    text += $" - [Area:{areaLevel} Player:{playerLevel} Diff:{playerLevel - areaLevel}] XP Penalty: {Math.Round(penalty, Settings.DecimalPlaces.Value)}%";
+                }
+                else
+                {
+                    text += $" - XP Penalty: {Math.Round(penalty, Settings.DecimalPlaces.Value)}%";
+                }
+            }
 
             if (Settings.ShowTTL)
             {

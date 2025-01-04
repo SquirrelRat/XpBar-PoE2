@@ -13,6 +13,12 @@ namespace XPBar
         [Menu("Show Time To Level")]
         public ToggleNode ShowTTL { get; set; } = new ToggleNode(true);
         
+        [Menu("Show XP Penalty")]
+        public ToggleNode ShowXPPenalty { get; set; } = new ToggleNode(true);
+        
+        [Menu("Show Debug Info")]
+        public ToggleNode ShowDebugInfo { get; set; } = new ToggleNode(false);
+        
         [Menu("Reset Timer On Idle (Minutes)")]
         public RangeNode<int> ResetTimerMinutes { get; set; } = new RangeNode<int>(1, 1, 10);
         
@@ -20,7 +26,7 @@ namespace XPBar
         public ColorNode TextColor { get; set; } = new ColorNode(Color.White);
 
         [Menu("Background Color")]
-        public ColorNode BackgroundColor { get; set; } = new ColorNode(Color.FromArgb(140, 0, 0, 0));
+        public ColorNode BackgroundColor { get; set; } = new ColorNode(Color.FromArgb(120, 0, 0, 0));
         
         [Menu("X Position")]
         public RangeNode<int> XPos { get; set; } = new RangeNode<int>(0, 0, 2160);
