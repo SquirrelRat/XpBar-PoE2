@@ -1,8 +1,9 @@
 ﻿using System;
 using ExileCore2;
+using System.Drawing;
+using ExileCore2.PoEMemory;
 using ExileCore2.PoEMemory.Components;
 using ExileCore2.Shared.Enums;
-using ExileCore2.PoEMemory;
 using System.Numerics;
 using RectangleF = ExileCore2.Shared.RectangleF;
 
@@ -10,12 +11,14 @@ namespace XPBar
 {
     public class Core : BaseSettingsPlugin<Settings>
     {
+        // Constants and Experience Table
         private const string DEFAULT_TIME_DISPLAY = "00:00:00";
         private const string MAX_TIME_DISPLAY = ">99:59:59";
         private const int MIN_TIME_FOR_CALCULATION = 10;
         private const int MAX_LEVEL = 100;
-        
-        private readonly uint[] ExpTable = { 
+
+        private static readonly uint[] ExpTable = 
+        {
             0, 525, 1760, 3781, 7184, 12186, 19324, 29377, 43181, 61693, 85990,
             117506, 157384, 207736, 269997, 346462, 439268, 551295, 685171,
             843709, 1030734, 1249629, 1504995, 1800847, 2142652, 2535122,
@@ -31,52 +34,79 @@ namespace XPBar
             1291270350, 1400795257, 1519130326, 1646943474, 1784977296,
             1934009687, 2094900291, 2268549086, 2455921256, 2658074992,
             2876116901, 3111280300, 3364828162, 3638186694, 3932818530,
-            4250334444
+            4250334444 
         };
 
+        // Tracking variables
         private DateTime sessionStart;
-        private uint sessionStartXp;
-        private bool isFirstRun = true;
-        private double xpPerSecond;
+        private uint sessionStartXp, lastXpAmount, areaStartXp;
+        private double xpPerSecond, areaXpGain, areasToLevelUp;
         private DateTime lastXpGainTime;
-        private uint lastXpAmount;
+        private int lastLevel;
 
-        public override bool Initialise() 
+        // Initialisation
+        public override bool Initialise()
         {
-            ResetTTL();
+            ResetTracking();
             return true;
         }
 
+        // Area Change Handling
         public override void AreaChange(AreaInstance area)
         {
             base.AreaChange(area);
-            ResetTTL();
+            UpdateAreaXpGain();
+            ResetTracking();
         }
 
-        private void ResetTTL()
+        // Reset Tracking
+        private void ResetTracking()
         {
-            isFirstRun = true;
-            xpPerSecond = 0;
-            lastXpGainTime = DateTime.Now;
-            lastXpAmount = 0;
+            sessionStart = DateTime.Now;
+            xpPerSecond = lastXpAmount = sessionStartXp = 0;
+            lastXpGainTime = sessionStart;
+            
+            var player = GameController.Player?.GetComponent<Player>();
+            if (player != null) areaStartXp = player.XP;
+            lastLevel = player?.Level ?? 0;
         }
 
+        // Update Area XP Gain
+        private void UpdateAreaXpGain()
+        {
+            var player = GameController.Player?.GetComponent<Player>();
+            if (player != null)
+            {
+                areaXpGain = player.XP - areaStartXp;
+                var remainingXp = ExpTable[player.Level] - player.XP;
+                if (areaXpGain > 0)
+                {
+                    areasToLevelUp = remainingXp / areaXpGain;
+                    areaStartXp = player.XP;
+                }
+            }
+        }
+
+        // Calculate XP Percentage
         private double GetExpPct(int level, uint exp)
         {
             if (level >= MAX_LEVEL) return 0.0;
 
-            var levelStart = ExpTable[level - 1];
-            var nextLevel = ExpTable[level];
-            var currExp = exp - levelStart;
-            var neededExp = nextLevel - levelStart;
+            if (level > lastLevel)
+            {
+                ResetTracking();
+                lastLevel = level;
+            }
 
-            return (double)currExp / neededExp * 100;
+            var levelStart = ExpTable[level - 1];
+            return (exp - levelStart) / (double)(ExpTable[level] - levelStart) * 100;
         }
 
+        // Calculate Time to Level Up (TTL)
         private string GetTTL(uint currentXp, int level)
         {
             var now = DateTime.Now;
-            
+
             if (currentXp > lastXpAmount)
             {
                 lastXpGainTime = now;
@@ -84,16 +114,14 @@ namespace XPBar
             }
             else if ((now - lastXpGainTime).TotalMinutes > Settings.ResetTimerMinutes)
             {
-                ResetTTL();
+                ResetTracking();
                 return DEFAULT_TIME_DISPLAY;
             }
 
-            if (isFirstRun)
+            if (sessionStart == default || sessionStartXp == 0)
             {
                 sessionStart = now;
                 sessionStartXp = currentXp;
-                lastXpAmount = currentXp;
-                isFirstRun = false;
                 return DEFAULT_TIME_DISPLAY;
             }
 
@@ -107,81 +135,66 @@ namespace XPBar
             var remaining = ExpTable[level] - currentXp;
             var seconds = remaining / xpPerSecond;
 
-            if (double.IsInfinity(seconds) || double.IsNaN(seconds)) 
-                return DEFAULT_TIME_DISPLAY;
-
-            var time = TimeSpan.FromSeconds(seconds);
-            return time.Hours > 99 ? MAX_TIME_DISPLAY : 
-                $"{time.Hours:00}:{time.Minutes:00}:{time.Seconds:00}";
+            return double.IsInfinity(seconds) || double.IsNaN(seconds) 
+                ? DEFAULT_TIME_DISPLAY 
+                : TimeSpan.FromSeconds(seconds).Hours > 99 
+                    ? MAX_TIME_DISPLAY 
+                    : $"{TimeSpan.FromSeconds(seconds).Hours:00}:{TimeSpan.FromSeconds(seconds).Minutes:00}:{TimeSpan.FromSeconds(seconds).Seconds:00}";
         }
 
-        private double CalculateXPPenalty(int areaLevel, int playerLevel)
-        {
-            var safeZone = (int)Math.Floor(3 + playerLevel / 16.0);
-            var effectiveDifference = Math.Max(Math.Abs(playerLevel - areaLevel) - safeZone, 0);
-            double xpMultiplier;
-
-            if (playerLevel < 95)
-            {
-                xpMultiplier = Math.Pow((playerLevel + 5.0) / (playerLevel + 5.0 + Math.Pow(effectiveDifference, 2.5)), 1.5);
-            }
-            else
-            {
-                xpMultiplier = Math.Pow((playerLevel + 5.0) / (playerLevel + 5.0 + Math.Pow(effectiveDifference, 2.5)), 1.5)
-                    * (1.0 / (1 + 0.1 * (playerLevel - 94.0)))
-                    * (1.0 / 3.1);
-            }
-
-            return Math.Max(xpMultiplier * 100.0, 1.0);
-        }
-
+        // Render XP Bar and TTL Display
         public override void Render()
         {
-            if (GameController.Game.IngameState.IngameUi.GameUI?.GetChildAtIndex(0) is not Element expBar) 
-                return;
+            var player = GameController.Player?.GetComponent<Player>();
+            if (player == null) return;
 
-            var player = GameController.Player.GetComponent<Player>();
             var pct = GetExpPct(player.Level, player.XP);
-            var text = $"{player.Level}: {Math.Round(pct, Settings.DecimalPlaces.Value)}%";
+            var xpText = $"{player.Level} ({Math.Round(pct, Settings.DecimalPlaces.Value)}%)";
 
-            if (Settings.ShowXPPenalty && GameController.Area?.CurrentArea != null)
-            {
-                var areaLevel = GameController.Area.CurrentArea.RealLevel;
-                var playerLevel = player.Level;
-                var penalty = CalculateXPPenalty(areaLevel, playerLevel);
-
-                if (Settings.ShowDebugInfo)
-                {
-                    text += $" - [Area:{areaLevel} Player:{playerLevel} Diff:{playerLevel - areaLevel}] XP Penalty: {Math.Round(penalty, Settings.DecimalPlaces.Value)}%";
-                }
-                else
-                {
-                    text += $" - XP Penalty: {Math.Round(penalty, Settings.DecimalPlaces.Value)}%";
-                }
-            }
-
+            string additionalText = "";
             if (Settings.ShowTTL)
             {
-                var ttl = GetTTL(player.XP, player.Level);
-                if (!string.IsNullOrEmpty(ttl))
-                    text += $" - TTL: {ttl}";
+                var ttlText = $"TTL: {GetTTL(player.XP, player.Level)}";
+                var areaTTLText = $" - Area TTL: {Math.Ceiling(areasToLevelUp)}";
+                additionalText = ttlText + areaTTLText;
             }
+
+            if (GameController.Game.IngameState.IngameUi.GameUI?.GetChildAtIndex(0) is not Element expBar) return;
 
             using (Graphics.SetTextScale(Settings.TextScaleSize.Value))
             {
-                var pos = Settings.XPos.Value != 0 || Settings.YPos.Value != 0
-                    ? new Vector2(Settings.XPos, Settings.YPos)
-                    : CalculateCenteredPosition(expBar.GetClientRect(), Graphics.MeasureText(text));
+                var frameWidth = expBar.GetClientRect().Width - 25;
+                var frameHeight = 12;
+                var frameX = expBar.GetClientRect().X + (expBar.GetClientRect().Width - frameWidth) / 2;
+                var frameY = expBar.GetClientRect().Center.Y - frameHeight / 2;
 
-                var align = Settings.XPos.Value != 0 || Settings.YPos.Value != 0 
-                    ? FontAlign.Center 
-                    : FontAlign.Left;
+                var framePosition = new Vector2(frameX, frameY);
+                var adjustedWidth = frameWidth - 2;
+                var barHeight = frameHeight - 2;
+                var barPosition = new Vector2(framePosition.X + 1, framePosition.Y + 1);
 
-                Graphics.DrawTextWithBackground(text, pos, Settings.TextColor, align, Settings.BackgroundColor);
+                if (Settings.ShowXPBar)
+                {
+                    Graphics.DrawFrame(new RectangleF(framePosition.X, framePosition.Y, frameWidth, frameHeight), Settings.OuterBarColor, 1);
+
+                    var initialXPWidth = adjustedWidth * ((sessionStartXp - ExpTable[player.Level - 1]) / (float)(ExpTable[player.Level] - ExpTable[player.Level - 1]));
+                    Graphics.DrawBox(new RectangleF(barPosition.X, barPosition.Y, initialXPWidth, barHeight), Settings.BarColor);
+
+                    var newXPWidth = adjustedWidth * ((player.XP - sessionStartXp) / (float)(ExpTable[player.Level] - ExpTable[player.Level - 1]));
+                    var newXPPosition = new Vector2(barPosition.X + initialXPWidth, barPosition.Y);
+                    Graphics.DrawBox(new RectangleF(newXPPosition.X, newXPPosition.Y, newXPWidth, barHeight), Settings.NewXPBarColor);
+
+                    var remainingWidth = adjustedWidth - initialXPWidth - newXPWidth;
+                    var remainingPosition = new Vector2(newXPPosition.X + newXPWidth, barPosition.Y);
+                    Graphics.DrawBox(new RectangleF(remainingPosition.X, remainingPosition.Y, remainingWidth, barHeight), Settings.BackgroundColor);
+                }
+
+                var xpTextSize = Graphics.MeasureText(xpText);
+                var additionalTextSize = Graphics.MeasureText(additionalText);
+
+                Graphics.DrawText(xpText, new Vector2(barPosition.X + 3, barPosition.Y + (barHeight / 2) - (xpTextSize.Y / 2)), Settings.TextColor);
+                Graphics.DrawText(additionalText, new Vector2(framePosition.X + frameWidth - Graphics.MeasureText(additionalText).X - 3, barPosition.Y + (barHeight / 2) - (additionalTextSize.Y / 2)), Settings.TextColor);
             }
         }
-
-        private static Vector2 CalculateCenteredPosition(RectangleF container, Vector2 textSize) =>
-            container.Location + (container.Size - textSize) / 2;
     }
 }
